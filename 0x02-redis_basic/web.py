@@ -1,44 +1,41 @@
 #!/usr/bin/env python3
-"""In this tasks, we will implement a get_page function
-(prototype: def get_page(url: str) -> str:). The core of
-the function is very simple. It uses the requests module
-to obtain the HTML content of a particular URL and returns it."""
+""" Main file """
 
-
-import redis
 import requests
-from functools import wraps
-
-r = redis.Redis()
-
-
-def url_access_count(method):
-    """Decorator for get_page function"""
-    @wraps(method)
-    def wrapper(url):
-        """Wrapper function"""
-        key = "cached:" + url
-        cached_value = r.get(key)
-        if cached_value:
-            return cached_value.decode("utf-8")
-
-            # Get new content and update cache
-        key_count = "count:" + url
-        html_content = method(url)
-
-        r.incr(key_count)
-        r.set(key, html_content, ex=10)
-        r.expire(key, 10)
-        return html_content
-    return wrapper
+import redis
+import time
 
 
-@url_access_count
 def get_page(url: str) -> str:
-    """Obtain HTML content of a particular"""
-    results = requests.get(url)
-    return results.text
+    """
+    uses the requests module to obtain the HTML
+    content of a particular URL and returns it.
 
+    Args:
+        url (str): _description_
 
-if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+    Returns:
+        str: content
+    """
+    # Initialize Redis client
+    redis_client = redis.Redis()
+
+    # Increment URL access count
+    url_key = f"count:{url}"
+    redis_client.incr(url_key)
+
+    # Check if content is cached
+    cached_content = redis_client.get(url)
+    if cached_content:
+        return cached_content.decode("utf-8")
+
+    # Make HTTP request to the URL
+    start_time = time.time()
+    response = requests.get(url)
+    end_time = time.time()
+
+    # Cache the HTML content with expiration
+    if end_time - start_time <= 10:
+        redis_client.setex(url, 10, response.content)
+
+    return response.content.decode("utf-8")
